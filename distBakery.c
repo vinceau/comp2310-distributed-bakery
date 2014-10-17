@@ -23,10 +23,15 @@ StudentId: u5388374
 #define MAXBUF 32
 #define COUNT_MAX 20
 
+struct cust {
+    int tix;
+    int sid;
+};
+
 int main(int argc, char *argv[]) {
     bakeryParamInit(argc, argv);
     bakeryStateInit();
-    
+
     int fd_cp[getNC()][2];
     int maxfd;
     fd_set fd_read_set;
@@ -64,6 +69,7 @@ int main(int argc, char *argv[]) {
     if (status != 0)
         resourceError(status, "server", "listen");
 
+
     /* ---- Create the children ----- */
     for (i=0; i < getNC(); i++) {
         /* ----Create child i ---- */
@@ -84,52 +90,42 @@ int main(int argc, char *argv[]) {
             if (status != 0)
                 resourceError(status, "selectsock child", "connect");
             
-            int cust[4]; // [cust no][bun no][ticket no][server no]
-            cust[0] = i; //cust no
-            cust[1] = getRandVal(getNB() - 1) + 1; //buns
-            cust[2] = -1; //ticket no
-            cust[3] = -1; //server no
+            int msg;
+            int nbytes;
             
-            int ticket = -1;
-            int server = -1;
-            int buns = cust[1];
-
             do {
+                int buns = rand() % getNB() + 1;
+
                 //take a ticket
-                write(sock_1, cust, sizeof(cust));
-                read(sock_1, &cust, sizeof(cust));
-                ticket = cust[2];
-                assert(ticket >= 0); //ensure we have a valid ticket
-                
+                nbytes = write(sock_1, &buns, sizeof(buns));
+                nbytes = read(sock_1, &msg, sizeof(msg));
+
                 //sleep a bit
                 sleepEvents();
 
                 //wait to be called
-                while (server == -1) {
-                    write(sock_1, cust, sizeof(cust));
-                    read(sock_1, &cust, sizeof(cust));
-                    server = cust[3];
-                    printf("correct server? %d\n", server);
-                }
+                do {
+                    nbytes = write(sock_1, &buns, sizeof(buns));
+                    nbytes = read(sock_1, &msg, sizeof(msg));
+                } while (msg == -1);
 
                 //sleep a bit
                 sleepEvents();
 
                 //order some buns
-                write(sock_1, cust, sizeof(cust));
-                read(sock_1, &server, sizeof(server));
+                nbytes = write(sock_1, &buns, sizeof(buns));
+                nbytes = read(sock_1, &msg, sizeof(msg));
 
                 //sleep a bit
                 sleepEvents();
 
                 //receive the buns
-                write(sock_1, cust, sizeof(cust));
-                read(sock_1, &buns, sizeof(buns));
-                assert(buns == cust[1]); //did we get the right no of buns?
+                nbytes = write(sock_1, &buns, sizeof(buns));
+                nbytes = read(sock_1, &msg, sizeof(msg));
                 
                 //sleep a bit
                 sleepEvents();
-            } while (buns > 0);
+            } while (nbytes > 0);
             printf("Child %d terminates\n", i);
             fflush(stdout);
             close(sock_1); close(sock_1);
@@ -163,6 +159,12 @@ int main(int argc, char *argv[]) {
     for (i = 0; i < getNS(); i++) {
         servers[i] = 1;
     }
+    // create the customers
+    struct cust c[getNC()];
+    c[i].tix = -1;
+    c[i].sid = -1;
+
+    int msg = 1;
 
     /* ----Clear the read set---- */
     FD_ZERO(&fd_read_set);
@@ -178,52 +180,45 @@ int main(int argc, char *argv[]) {
         for (i=0; i < getNC(); i++) {
             /* ----Was it child i---- */
             if (FD_ISSET(sock_2[i], &fd_read_set)) {
-                int cust[4];
-                //printf("bytes expected %d, bytes read %zu\n", (int) 
-                //read(sock_2[i], cust, sizeof(cust)), sizeof(cust));
-                printf("awaiting input...\n");
-                read(sock_2[i], cust, sizeof(cust));
-                int cid = cust[0];
-                int nbuns = cust[1];
-                int ticket = cust[2];
-                int sid = cust[3];
-                switch (custState(cid)) {
-                    case TAKE: //take action
-                        ticket = nextTktTake();
-                        take(cid, ticket);
-                        //printf("ticket %d\n", custTkt(cid));
-                        //fflush(stdout);
-                        cust[2] = ticket;
-                        write(sock_2[i], &cust, sizeof(cust));
+                int buns;
+                int result = -1;
+                read(sock_2[i], &buns, sizeof(buns));
+
+                switch (custState(i)) {
+                    case TAKE:
+                        c[i].tix = nextTktTake();
+                        result = c[i].tix;
+                        take(i, c[i].tix);
                         break;
                     case CALL:
                         if (serversAvail() > 0) {
-                            for (i = 0; i < getNS(); i++) {
-                                if (servers[i]) {
-                                    sid = i;
-                                    servers[i] = 0; //server is busy
+                            for (int s = 0; s < getNS(); s++) {
+                                if (servers[s]) {
+                                    call(s, c[i].tix);
+                                    c[i].sid = s;
+                                    result = s;
+                                    servers[s] = 0; //server is busy
                                     break;
                                 }
                             }
-                            call(sid, ticket);
-                            //assert(custServer(cid) == sid);
-                            cust[3] = sid;
                         }
-                        write(sock_2[i], &cust, sizeof(cust));
                         break;
                     case PAY:
-                        pay(cid, sid, ticket, nbuns);
+                        pay(i, c[i].sid, c[i].tix, buns);
+                        result = serverPaid(c[i].sid);
                         break;
                     case BUN:
-                        if (serverNBuns(sid) < nbuns) {
-                            topup(sid);
+                        if (serverNBuns(c[i].sid) < buns) {
+                            topup(c[i].sid);
                         }
-                        bun(cid, sid, nbuns);
-                        assert(servers[sid] == 0);
-                        servers[sid] = 1; //sever is now available again
-                        write(sock_2[i], &nbuns, sizeof(nbuns));
+                        bun(i, c[i].sid, buns);
+                        result = buns;
+                        servers[c[i].sid] = 1;
+                        c[i].tix = -1;
+                        c[i].sid = -1;
                         break;
                 }
+                write(sock_2[i], &result, sizeof(result));
             }
         }
     }
