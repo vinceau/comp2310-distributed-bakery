@@ -20,10 +20,8 @@ StudentId: u5388374
 #include "bakeryState.h"
 #include "socketWrapper.h"
 
-#define MAXBUF 32
-#define COUNT_MAX 20
-
 struct cust {
+    int nbuns;
     int tix;
     int sid;
 };
@@ -35,8 +33,7 @@ int main(int argc, char *argv[]) {
     int fd_cp[getNC()][2];
     int maxfd;
     fd_set fd_read_set;
-    char buffer[MAXBUF];
-    int i, counter, status;
+    int status;
     int sock_1, sock_2[getNC()];
     struct sockaddr_in client[getNC()], server;
 
@@ -71,13 +68,12 @@ int main(int argc, char *argv[]) {
 
 
     /* ---- Create the children ----- */
-    for (i=0; i < getNC(); i++) {
+    for (int i=0; i < getNC(); i++) {
         /* ----Create child i ---- */
         int pid = fork();
         if (pid < 0)
             resourceError(status, "selectsock", "fork");
         if (pid == 0) { /* ---- perform child i  ---- */
-            int count;
             close(sock_1); /*Close the parent's listening socket */
             sock_1 = socket(AF_INET, SOCK_STREAM, 0);
             if (sock_1 < 0)
@@ -90,44 +86,40 @@ int main(int argc, char *argv[]) {
             if (status != 0)
                 resourceError(status, "selectsock child", "connect");
             
-            int msg;
+            int msg = 0;
             int nbytes;
             
             do {
-                int buns = rand() % getNB() + 1;
-
                 //take a ticket
-                nbytes = write(sock_1, &buns, sizeof(buns));
-                nbytes = read(sock_1, &msg, sizeof(msg));
+                write(sock_1, &msg, sizeof(msg));
+                read(sock_1, &msg, sizeof(msg));
 
                 //sleep a bit
                 sleepEvents();
 
                 //wait to be called
                 do {
-                    nbytes = write(sock_1, &buns, sizeof(buns));
-                    nbytes = read(sock_1, &msg, sizeof(msg));
+                    write(sock_1, &msg, sizeof(msg));
+                    read(sock_1, &msg, sizeof(msg));
                 } while (msg == -1);
 
                 //sleep a bit
                 sleepEvents();
 
                 //order some buns
-                nbytes = write(sock_1, &buns, sizeof(buns));
-                nbytes = read(sock_1, &msg, sizeof(msg));
+                write(sock_1, &msg, sizeof(msg));
+                read(sock_1, &msg, sizeof(msg));
 
                 //sleep a bit
                 sleepEvents();
 
                 //receive the buns
-                nbytes = write(sock_1, &buns, sizeof(buns));
+                write(sock_1, &msg, sizeof(msg));
                 nbytes = read(sock_1, &msg, sizeof(msg));
                 
                 //sleep a bit
                 sleepEvents();
             } while (nbytes > 0);
-            printf("Child %d terminates\n", i);
-            fflush(stdout);
             close(sock_1); close(sock_1);
             exit(0);
         }
@@ -135,7 +127,7 @@ int main(int argc, char *argv[]) {
 
 
     /* ----Now for the parent---- */
-    for (i=0; i < getNC(); i++) {
+    for (int i=0; i < getNC(); i++) {
         namelen = sizeof(client[i]);
         sock_2[i] = accept(sock_1, (struct sockaddr *) &client[i], &namelen);
         if (sock_2[i] < 0)
@@ -146,48 +138,46 @@ int main(int argc, char *argv[]) {
 
     /* ----What is the maximum file descriptor for select---- */
     maxfd = fd_cp[0][0];
-    for (i=1; i < getNC(); i++)
+    for (int i=1; i < getNC(); i++)
         if (sock_2[i] > maxfd)
             maxfd = sock_2[i];
     maxfd = maxfd + 1;
 
-    counter = 0;
-
     // create the servers
     int servers[getNS()];
     // initialise them to 1 to signify ready
-    for (i = 0; i < getNS(); i++) {
+    for (int i = 0; i < getNS(); i++) {
         servers[i] = 1;
     }
-    // create the customers
+    // initialise the customers
     struct cust c[getNC()];
-    c[i].tix = -1;
-    c[i].sid = -1;
-
-    int msg = 1;
+    for (int i = 0; i < getNC(); i++) {
+        c[i].nbuns = (rand() % getNB()) + 1;
+        c[i].tix = -1;
+        c[i].sid = -1;
+    }
 
     /* ----Clear the read set---- */
     FD_ZERO(&fd_read_set);
     while (1) {
         /* ----Set file descriptor set to getNC() read descriptors---- */
-        for (i=0; i < getNC(); i++) {
+        for (int i=0; i < getNC(); i++) {
             FD_SET(sock_2[i], &fd_read_set);
         }
 
         /* ----Wait in select until file descriptors change---- */
         select(maxfd, &fd_read_set, NULL, NULL, NULL);
         // check client connected (which bit was set from select)
-        for (i=0; i < getNC(); i++) {
+        for (int i=0; i < getNC(); i++) {
             /* ----Was it child i---- */
             if (FD_ISSET(sock_2[i], &fd_read_set)) {
-                int buns;
-                int result = -1;
-                read(sock_2[i], &buns, sizeof(buns));
+                int msg = -1;
+                read(sock_2[i], &msg, sizeof(msg));
 
                 switch (custState(i)) {
                     case TAKE:
                         c[i].tix = nextTktTake();
-                        result = c[i].tix;
+                        msg = c[i].tix;
                         take(i, c[i].tix);
                         break;
                     case CALL:
@@ -196,40 +186,43 @@ int main(int argc, char *argv[]) {
                                 if (servers[s]) {
                                     call(s, c[i].tix);
                                     c[i].sid = s;
-                                    result = s;
+                                    msg = s;
                                     servers[s] = 0; //server is busy
                                     break;
                                 }
                             }
+                        } else {
+                            msg = -1;
                         }
                         break;
                     case PAY:
-                        pay(i, c[i].sid, c[i].tix, buns);
-                        result = serverPaid(c[i].sid);
+                        pay(i, c[i].sid, c[i].tix, c[i].nbuns);
+                        msg = serverPaid(c[i].sid);
                         break;
                     case BUN:
-                        if (serverNBuns(c[i].sid) < buns) {
+                        if (serverNBuns(c[i].sid) < c[i].nbuns) {
                             topup(c[i].sid);
                         }
-                        bun(i, c[i].sid, buns);
-                        result = buns;
-                        servers[c[i].sid] = 1;
+                        bun(i, c[i].sid, c[i].nbuns);
+                        msg = c[i].nbuns;
+                        
+                        //reset values
+                        servers[c[i].sid] = 1; //server is ready again
+                        c[i].nbuns = rand() % getNB() + 1; //new no. of buns
                         c[i].tix = -1;
                         c[i].sid = -1;
                         break;
                 }
-                write(sock_2[i], &result, sizeof(result));
+                write(sock_2[i], &msg, sizeof(msg));
             }
         }
     }
 
     /* ---- Request the children to terminate and wait ---- */
-    counter = -1;
-    for (i=0; i < getNC(); i++) {
-        write(sock_2[i], &counter, sizeof(counter));
+    for (int i=0; i < getNC(); i++) {
         close(sock_2[i]); close(sock_2[i]);  
     }
-    for (i=0; i < getNC(); i++)
+    for (int i=0; i < getNC(); i++)
         wait(NULL);
     exit(0);
 } //main()
