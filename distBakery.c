@@ -41,8 +41,9 @@ int main(int argc, char *argv[]) {
 
     /* ----Create TCP/IP socket---- */
     sock_1 = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock_1 == -1) 
+    if (sock_1 == -1) {
         resourceError(sock_1, "server", "socket");
+    }
     printf("Socket created successfully.\n");
 
     /* ----Address information for use with bind---- */
@@ -52,76 +53,86 @@ int main(int argc, char *argv[]) {
 
     /* ----Bind socket to address and port---- */
     status = bind(sock_1, (struct sockaddr *) &server, sizeof(server)); 
-    if (status != 0)
+    if (status != 0) {
         resourceError(status, "server", "bind");
+    }
 
     /* ----Find out what port number was assigned---- */
     namelen = sizeof(server);
     status = getsockname(sock_1, (struct sockaddr *) &server, &namelen);
-    if (status != 0)
+    if (status != 0) {
         resourceError(status, "server", "getsockname - port number");
+    }
     printf("The assigned server port number is %d\n", ntohs(server.sin_port));
 
     status = listen(sock_1, getNC()); //create a queue of getNC() size
-    if (status != 0)
+    if (status != 0) {
         resourceError(status, "server", "listen");
-
+    }
 
     /* ---- Create the children ----- */
     for (int i=0; i < getNC(); i++) {
         /* ----Create child i ---- */
-        int pid = fork();
-        if (pid < 0)
-            resourceError(status, "selectsock", "fork");
-        if (pid == 0) { /* ---- perform child i  ---- */
-            close(sock_1); /*Close the parent's listening socket */
-            sock_1 = socket(AF_INET, SOCK_STREAM, 0);
-            if (sock_1 < 0)
-                resourceError(sock_1, "selectsock child", "socket");
-            printf("Client %d socket created\n", i);
+        switch(fork()) {
+            case -1:
+                resourceError(status, "selectsock", "fork");
+                break;
+            case 0: /* ---- perform child i  ---- */
+                close(sock_1); /*Close the parent's listening socket */
+                sock_1 = socket(AF_INET, SOCK_STREAM, 0);
+                if (sock_1 < 0) {
+                    resourceError(sock_1, "selectsock child", "socket");
+                }
+                printf("Client %d socket created\n", i);
 
-            /* ---- Attempt to connect to the server; n.b. server struct set by 
-             * parent ---- */
-            status = connect(sock_1, (struct sockaddr *) &server, sizeof(server));
-            if (status != 0)
-                resourceError(status, "selectsock child", "connect");
-            
-            int msg = 0;
-            int nbytes;
-            
-            do {
-                //take a ticket
-                write(sock_1, &msg, sizeof(msg));
-                read(sock_1, &msg, sizeof(msg));
-
-                //sleep a bit
-                sleepEvents();
-
-                //wait to be called
+                /* ---- Attempt to connect to the server; 
+                 * n.b. server struct set by parent ---- */
+                status = connect(sock_1, (struct sockaddr *) &server,
+                        sizeof(server));
+                if (status != 0) {
+                    resourceError(status, "selectsock child", "connect");
+                }
+                
+                int msg = 0;
+                int nbytes;
+                
                 do {
+                    //take a ticket
                     write(sock_1, &msg, sizeof(msg));
                     read(sock_1, &msg, sizeof(msg));
-                } while (msg == -1);
 
-                //sleep a bit
-                sleepEvents();
+                    //sleep a bit
+                    sleepEvents();
 
-                //order some buns
-                write(sock_1, &msg, sizeof(msg));
-                read(sock_1, &msg, sizeof(msg));
+                    //wait to be called
+                    do {
+                        write(sock_1, &msg, sizeof(msg));
+                        read(sock_1, &msg, sizeof(msg));
+                    } while (msg == -1);
 
-                //sleep a bit
-                sleepEvents();
+                    //sleep a bit
+                    sleepEvents();
 
-                //receive the buns
-                write(sock_1, &msg, sizeof(msg));
-                nbytes = read(sock_1, &msg, sizeof(msg));
-                
-                //sleep a bit
-                sleepEvents();
-            } while (nbytes > 0);
-            close(sock_1); close(sock_1);
-            exit(0);
+                    //order some buns
+                    write(sock_1, &msg, sizeof(msg));
+                    read(sock_1, &msg, sizeof(msg));
+
+                    //sleep a bit
+                    sleepEvents();
+
+                    //receive the buns
+                    write(sock_1, &msg, sizeof(msg));
+                    nbytes = read(sock_1, &msg, sizeof(msg));
+                    
+                    //sleep a bit
+                    sleepEvents();
+                } while (nbytes > 0);
+                close(sock_1); close(sock_1);
+                exit(0);
+                break;
+            default:
+                //do nothing
+                break;
         }
     }
 
@@ -130,8 +141,9 @@ int main(int argc, char *argv[]) {
     for (int i=0; i < getNC(); i++) {
         namelen = sizeof(client[i]);
         sock_2[i] = accept(sock_1, (struct sockaddr *) &client[i], &namelen);
-        if (sock_2[i] < 0)
+        if (sock_2[i] < 0) {
             resourceError(status, "parent", "accept");
+        }
         printf("Server received connection from child %d %s\n", i, 
                 inet_ntoa(client[i].sin_addr));
     }
@@ -139,8 +151,9 @@ int main(int argc, char *argv[]) {
     /* ----What is the maximum file descriptor for select---- */
     maxfd = fd_cp[0][0];
     for (int i=1; i < getNC(); i++)
-        if (sock_2[i] > maxfd)
+        if (sock_2[i] > maxfd) {
             maxfd = sock_2[i];
+        }
     maxfd = maxfd + 1;
 
     // create the servers
@@ -222,7 +235,8 @@ int main(int argc, char *argv[]) {
     for (int i=0; i < getNC(); i++) {
         close(sock_2[i]); close(sock_2[i]);  
     }
-    for (int i=0; i < getNC(); i++)
+    for (int i=0; i < getNC(); i++) {
         wait(NULL);
+    }
     exit(0);
 } //main()
