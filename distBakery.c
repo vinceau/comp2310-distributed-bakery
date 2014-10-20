@@ -196,7 +196,7 @@ int main(int argc, char *argv[]) {
                     case CALL:
                         if (serversAvail() > 0) {
                             for (int s = 0; s < getNS(); s++) {
-                                if (servers[s]) {
+                                if (servers[s] && c[i].tix == nextTktCall()) {
                                     call(s, c[i].tix);
                                     c[i].sid = s;
                                     msg = s;
