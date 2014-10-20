@@ -204,7 +204,7 @@ int main(int argc, char *argv[]) {
                         msg = serverPaid(c[i].sid);
                         break;
                     case BUN:
-                        if (serverNBuns(c[i].sid) < c[i].nbuns) {
+                        if (useCook() && serverNBuns(c[i].sid) < c[i].nbuns) {
                             topup(c[i].sid);
                         }
                         bun(i, c[i].sid, c[i].nbuns);
