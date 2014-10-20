@@ -40,23 +40,13 @@ int main(int argc, char *argv[]) {
 
     socklen_t namelen;
 
-    /* ----Create TCP/IP socket---- */
-    sock_1 = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock_1 == -1) {
-        resourceError(sock_1, "server", "socket");
-    }
-    printf("Socket created successfully.\n");
-
     /* ----Address information for use with bind---- */
     server.sin_family = AF_INET;         /* it is an IP address */
     server.sin_port   = 0;               /* use O/S defined port number */
     server.sin_addr.s_addr = INADDR_ANY; /* use any interface on this host*/
-
-    /* ----Bind socket to address and port---- */
-    status = bind(sock_1, (struct sockaddr *) &server, sizeof(server)); 
-    if (status != 0) {
-        resourceError(status, "server", "bind");
-    }
+    
+    /* ----Create TCP/IP socket---- */
+    sock_1 = setupServerSocket(10, (int *) &server.sin_port);
 
     /* ----Find out what port number was assigned---- */
     namelen = sizeof(server);
