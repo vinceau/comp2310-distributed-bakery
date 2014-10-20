@@ -69,6 +69,7 @@ int main(int argc, char *argv[]) {
         switch(fork()) {
             case -1:
                 resourceError(status, "selectsock", "fork");
+                exit(-1);
                 break;
             case 0: /* ---- perform child i  ---- */
                 close(sock_1); /*Close the parent's listening socket */
@@ -120,15 +121,13 @@ int main(int argc, char *argv[]) {
                     //sleep a bit
                     sleepEvents();
                 } while (nbytes > 0);
-                close(sock_1); close(sock_1);
+                close(sock_1);
                 exit(0);
                 break;
             default:
-                //do nothing
-                break;
+                break; //do nothing
         }
     }
-
 
     /* ----Now for the parent---- */
     for (int i=0; i < getNC(); i++) {
@@ -226,7 +225,7 @@ int main(int argc, char *argv[]) {
 
     /* ---- Request the children to terminate and wait ---- */
     for (int i=0; i < getNC(); i++) {
-        close(sock_2[i]); close(sock_2[i]);  
+        close(sock_2[i]);
     }
     for (int i=0; i < getNC(); i++) {
         wait(NULL);
