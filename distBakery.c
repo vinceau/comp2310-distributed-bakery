@@ -15,6 +15,7 @@ StudentId: u5388374
 #include <sys/select.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 
 #include "bakeryParam.h"
 #include "bakeryState.h"
