@@ -6,6 +6,8 @@ StudentId: u5388374
  ***Disclaimer***: (modify as appropriate)
  The work that I am submitting for this program is without significant
  contributions from others (excepting course staff).
+ Some of my code was based off the code in the tute 7 lab.
+
  */
 #include <stdio.h>
 #include <stdlib.h>
