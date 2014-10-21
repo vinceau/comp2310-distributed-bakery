@@ -194,6 +194,7 @@ int main(int argc, char *argv[]) {
                         c[i].tix = nextTktTake();
                         msg = c[i].tix;
                         take(i, c[i].tix);
+                        assert(c[i].tix == custTkt(i));
                         break;
                     case CALL:
                         if (serversAvail() > 0) {
@@ -203,6 +204,7 @@ int main(int argc, char *argv[]) {
                                     c[i].sid = s;
                                     msg = s;
                                     servers[s] = 0; //server is busy
+                                    assert(serverTkt(s) == custTkt(i));
                                     break;
                                 }
                             }
@@ -213,6 +215,7 @@ int main(int argc, char *argv[]) {
                     case PAY:
                         pay(i, c[i].sid, c[i].tix, c[i].nbuns);
                         msg = serverPaid(c[i].sid);
+                        assert(serverCustId(c[i].sid) == i);
                         break;
                     case BUN:
                         if (useCook() && serverNBuns(c[i].sid) < c[i].nbuns) {
