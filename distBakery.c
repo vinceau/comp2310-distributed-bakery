@@ -23,11 +23,21 @@ StudentId: u5388374
 #include "bakeryState.h"
 #include "socketWrapper.h"
 
+
+//structure to handle customer items
 struct cust {
     int nbuns;
     int tix;
     int sid;
 };
+
+//defensive programming check to ensure read and writes actually succeed
+ssize_t check(ssize_t result) {
+    if (result < 0) {
+        exit(-1);
+    }
+    return result;
+}
 
 int main(int argc, char *argv[]) {
     bakeryParamInit(argc, argv);
@@ -92,31 +102,31 @@ int main(int argc, char *argv[]) {
                 
                 do {
                     //take a ticket
-                    write(sock_1, &msg, sizeof(msg));
-                    read(sock_1, &msg, sizeof(msg));
+                    check(write(sock_1, &msg, sizeof(msg)));
+                    check(read(sock_1, &msg, sizeof(msg)));
 
                     //sleep a bit
                     sleepEvents();
 
                     //wait to be called
                     do {
-                        write(sock_1, &msg, sizeof(msg));
-                        read(sock_1, &msg, sizeof(msg));
+                        check(write(sock_1, &msg, sizeof(msg)));
+                        check(read(sock_1, &msg, sizeof(msg)));
                     } while (msg == -1);
 
                     //sleep a bit
                     sleepEvents();
 
                     //order some buns
-                    write(sock_1, &msg, sizeof(msg));
-                    read(sock_1, &msg, sizeof(msg));
+                    check(write(sock_1, &msg, sizeof(msg)));
+                    check(read(sock_1, &msg, sizeof(msg)));
 
                     //sleep a bit
                     sleepEvents();
 
                     //receive the buns
-                    write(sock_1, &msg, sizeof(msg));
-                    nbytes = read(sock_1, &msg, sizeof(msg));
+                    check(write(sock_1, &msg, sizeof(msg)));
+                    nbytes = check(read(sock_1, &msg, sizeof(msg)));
                     
                     //sleep a bit
                     sleepEvents();
@@ -177,7 +187,7 @@ int main(int argc, char *argv[]) {
             /* ----Was it child i---- */
             if (FD_ISSET(sock_2[i], &fd_read_set)) {
                 int msg = -1;
-                read(sock_2[i], &msg, sizeof(msg));
+                check(read(sock_2[i], &msg, sizeof(msg)));
 
                 switch (custState(i)) {
                     case TAKE:
@@ -218,7 +228,7 @@ int main(int argc, char *argv[]) {
                         c[i].sid = -1;
                         break;
                 }
-                write(sock_2[i], &msg, sizeof(msg));
+                check(write(sock_2[i], &msg, sizeof(msg)));
             }
         }
     }
